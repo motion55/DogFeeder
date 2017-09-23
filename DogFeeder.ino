@@ -1,6 +1,12 @@
  
   //
+  #define USE_GSM     1
+  #define USE_KEYPAD  1
+  #define USE_REPORT  0
+  #define USE_RGB_LCD 1
+  
   // include the library code:
+#if USE_GSM  
   #include "src/SIMCOM.h"
   #include "src/sms.h"
   SMSGSM sms;
@@ -10,23 +16,10 @@
   #define SMS_TARGET1 "09297895641"
   #define SMS_TARGET2 "00000000000" //spare
 
-  #define USE_GSM     1
-  #define USE_SDCARD  0
-  #define USE_RTC     1
-  #define USE_SMART   0
-  #define USE_KEYPAD  1
-  #define USE_REPORT  1
-  
-#if (defined(HAVE_HWSERIAL2)&&USE_GSM)
-  #define PA2_Serial  Serial2
-#elif defined(HAVE_HWSERIAL1) 
-  #define PA2_Serial  Serial1
-#else
-  #define PA2_Serial  Serial
+  typedef char phone_number_t[14];
+  phone_number_t phone_book[3] = { SMS_TARGET0, SMS_TARGET1, SMS_TARGET2 };
 #endif
-
-  #define PesoPerWatt 2.5f
-
+  
 #if USE_REPORT
   #include <EEPROM.h>
 
@@ -44,16 +37,14 @@
   char ReportMins = REPORT_MIN;
 #endif
   
-  typedef char phone_number_t[14];
-  phone_number_t phone_book[3] = { SMS_TARGET0, SMS_TARGET1, SMS_TARGET2 };
-
-#if USE_RTC
   #include <Wire.h>
+#if USE_RGB_LCD
+  #include "rgb_lcd.h"
+  #else
   //#include <LiquidCrystal_I2C.h>
-  #include <LiquidCrystal_PCF8574.h>
-#else
-  #include "LiquidCrystal.h"
-#endif  
+  #include "LiquidCrystal_PCF8574.h"
+#endif
+
   /*The circuit:
   * LCD RS pin to digital pin 10
   * LCD R/W pin to GND
@@ -70,11 +61,11 @@
   */
   // initialize the library with the numbers of the interface pins
 #if defined(LiquidCrystal_I2C_h)
-  LiquidCrystal_I2C lcd(0x27,20,4);
+  LiquidCrystal_I2C lcd(0x27,16,2);
 #elif defined(LiquidCrystal_PCF8574_h)
   LiquidCrystal_PCF8574 lcd(0x27);
 #else   
-  LiquidCrystal lcd(A0,A1,A2,A3,A4,A5);
+  rgb_lcd lcd;
 #endif  
   int i, j, k;
   long previousMillis = 0;
@@ -82,57 +73,12 @@
   long previousMillis2 = 0;
   const long period2 = 1000;
   
-  char data[100];
-  
-  String sVrms = "";
-  String sIrms = "";
-  String sPreal = "";
-  String sVA = "";
-  String sQA = "";
-  String sQI = "";
-  String sPF = "";
-  String sTemp = "";
-  String sPFU = "";
-  String sPQF = "";
-  String sWattHr = "";
-  
-  String sPH = "";
-  String sInterval = "";
-  
-  float Vrms = 0.0f;
-  float Irms = 0.0f;
-  float Preal = 0.0f;
-  float VA = 0.0f;
-  float QA = 0.0f;
-  float QI = 0.0f;
-  float PF = 0.0f;
-  float Temp = 0.0f;
-  float PFU = 0.0f;
-  float PQF = 0.0f;
-  float WattHr = 0.0f;
-  float PH = 0.0f;
-  unsigned long Interval = 0;
-  const float peso_per_kw = 13.0f;
-  const int RelayPin = A0;
-  boolean RelayON;
-  float Total_WattHr = 0.0f;
-  float Credit_WattHr = 0.0f;
-  float Prev_WattHr = 0.0f;
-  
 #if USE_GSM  
   #ifndef HAVE_HWSERIAL1
   const int RX_pin = 2;
   const int TX_pin = 3;
   #endif
   const int GSM_ON_pin = 0;
-#endif  
-
-#if USE_SDCARD 
-  #include <SPI.h>
-  #include <SD.h>
-
-  const int chipSelect = 8;
-  boolean card_present = false;
 #endif  
 
 #if USE_KEYPAD
@@ -147,8 +93,6 @@
 #endif  
 
   #include <Time.h>
-  
-  extern boolean time_not_set;
   
   char DateText[] = "02/22/2017 \0";
   //                 01234567890
@@ -169,13 +113,7 @@
     lcd.setCursor(0,2);
     lcd.print(F("  By Nery And Jasa  "));
     
-  #if USE_RTC
     DS3231_setup();
-    time_t t = DS3231_readAlarmOne();
-    Credit_WattHr = t;    
-    t = DS3231_readAlarmTwo();
-    Total_WattHr = t;
-  #endif    
   
   #if USE_KEYPAD
     Unlocked = false;
@@ -204,25 +142,6 @@
     }
   #endif    
   
-  #if USE_SDCARD 
-    lcd.setCursor(0,3);
-    lcd.print(F(" Checking SD card..."));
-    // see if the card is present and can be initialized:
-    lcd.setCursor(0,3);
-    if (SD.begin(chipSelect)) 
-    {
-      lcd.print(F("SD card initialized."));
-      card_present = true;
-      Save2Log(F("Log Started."));
-    }
-    else
-    {
-      lcd.print(F("SD card init failed."));
-      card_present = false;
-    }
-    delay(1000);
-  #endif  
-  
 #if USE_GSM  
     lcd.setCursor(0,3);
     lcd.print(F(" Initializing  GSM. "));
@@ -235,177 +154,29 @@
     {
       started=true;  
       //Send a message to indicate successful connection
-      String hello(F("Energy Meter is now Online."));
-      String stringOne(F("\r\n Report Time "));
-      AddReportTime(stringOne);
-      hello.concat(stringOne); 
+      String hello(F("Dog Feeder is now Online."));
       sms.SendSMS(phone_book[DEFAULT_NUMBER], hello.c_str());
-      //sms.SendSMS(SMS_TARGET1, hello.c_str());
-  #if USE_RTC
-      time_not_set = false;
-  #else
-      time_not_set = true;
-      if (time_not_set) 
-      {
-        //Serial.println(F("Requesting load balance"));
-      #if USE_SMART
-        sms.SendSMS("214","1515");
-      #else  
-        sms.SendSMS("222","BAL");
-      #endif
-      }
-  #endif
     }
     else
     {
-      PA2_Serial.println(F("Power Meter is offline!"));
       lcd.print(F("Initializing failed."));
       delay(3000);
     }
-  #endif  
+#endif  
     previousMillis = millis();
     previousMillis2 = millis();
 
-    RelayON = false;
-    pinMode(RelayPin, OUTPUT);
-    digitalWrite(RelayPin,LOW);
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);
-    
-    PA2_Serial.begin(9600);
-    PA2_stop();
-    PA2_reset();
     
     LCD_refresh();
   }
   
-  #define C_STX 0x02
-  #define C_ETX 0x03
-  
-  void ParseData()
-  {
-    String sdata(data);
-    
-    switch (j) {
-      case 0:  // Status
-        break;
-      case 1:  // Version
-        break;
-      case 2:  // Vrms
-        sVrms = sdata;
-        break;   
-      case 3:  // Irms
-        sIrms = sdata;
-        break;   
-      case 4:  // Preal
-        sPreal = sdata;
-        break;   
-      case 5:
-        sVA = sdata;
-        break;   
-      case 6:
-        sQA = sdata;
-        break;
-      case 7:
-        sQI = sdata;
-        break;      
-      case 8:
-        sPF = sdata;
-        break;   
-      case 9:
-        sTemp = sdata;
-        break;   
-      case 10:
-        sPH = sdata;
-        break;   
-      case 11:
-        sPFU = sdata;
-        break;   
-      case 12:
-        sPQF = sdata;
-        break;   
-      case 13:
-        sWattHr = sdata;
-        break;   
-      case 14:
-        sInterval = sdata;
-        break;   
-    }
-    i = 0;
-    data[i] = 0;
-    j++;
-  }
-  
   void loop() {
    // put your main code here, to run repeatedly:
-    while (PA2_Serial.available()>0)
-    {
-      char c = PA2_Serial.read();
-      //SerialUSB.write(c);
-      switch (c) {
-        case C_STX:
-          i = 0;
-          j = 0;
-          data[i] = 0;
-          break;
-        case ',':
-          ParseData();
-          break;  
-        case C_ETX:
-          ParseData();
-          if (j==15)
-          {
-            Vrms = sVrms.toFloat();
-            Irms = sIrms.toFloat();
-            Preal = sPreal.toFloat();
-            VA = sVA.toFloat();
-            QA = sQA.toFloat();
-            QI = sQI.toFloat();
-            PF = sPF.toFloat();
-            Temp = sTemp.toFloat();
-            PFU = sPFU.toFloat();
-            PQF = sPQF.toFloat();
-            WattHr = sWattHr.toFloat();
-            PH = sPH.toFloat();
-            Interval = sInterval.toInt();
-            if (WattHr>Prev_WattHr)
-            {
-              float delta = WattHr - Prev_WattHr;
-              Credit_WattHr -= delta;
-              Total_WattHr += delta;
-            #if USE_RTC
-              time_t t = 0;
-              if (Credit_WattHr>0) 
-                t = Credit_WattHr;
-              else
-                Credit_WattHr = 0.0f;
-              DS3231_saveAlarmOne(t);
-              t = Total_WattHr;
-              DS3231_saveAlarmTwo(t);
-            #endif
-            }
-            Prev_WattHr = WattHr;
-            PA2_stop();
-          }
-          break;  
-        default:
-          data[i++] = c;
-          if (i>=sizeof(data)) i=0;
-          data[i] = 0;
-          break;      
-      }
-    } 
-   
     unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis > period1)
-    {
-      previousMillis = currentMillis;
-      LCD_refresh();
-      PA2_start();
-    }
-    //else
-    if (currentMillis - previousMillis2 > period2)
-    {
+
+    if (currentMillis - previousMillis2 > period2) {
       previousMillis2 = currentMillis;
 
       UpdateTime();
@@ -423,32 +194,15 @@
       case 'A':
         if (CheckPassword(password))
         {
-          float newLoad = GetWattHr(true);
-          Credit_WattHr += newLoad;
-        #if USE_RTC
-          if (Credit_WattHr>86000.0f) Credit_WattHr = 86000.0f;
-          time_t t = Credit_WattHr;
-          DS3231_saveAlarmOne(t);
-        #endif
         }
         else
         {
-          lcd.clear();
-          lcd.setCursor(0,3);
-          lcd.print(F(" Password rejected. "));
-          delay(2000);
+          LCD_PIN_reject();
         }
         break;
       case 'B':
         if (CheckPassword(password))
         {
-          float newLoad = GetWattHr(false);
-          Credit_WattHr -= newLoad;
-          if (Credit_WattHr<0.0f) Credit_WattHr = 0.0f;
-        #if USE_RTC
-          time_t t = Credit_WattHr;
-          DS3231_saveAlarmOne(t);
-        #endif
         }
         else
         {
@@ -458,11 +212,6 @@
       case 'C':
         if (CheckPassword(password))
         {
-          Credit_WattHr = 0.0f                ;
-        #if USE_RTC
-          time_t t = Credit_WattHr;
-          DS3231_saveAlarmOne(t);
-        #endif
         }
         else
         {
@@ -495,13 +244,14 @@
     lcd.init();
     lcd.backlight();
   #elif defined(LiquidCrystal_PCF8574_h)
-    lcd.begin(20,4);
+    lcd.begin(16,2);
     lcd.setBacklight(255);
   #else
-    lcd.begin(20,4);
+    lcd.begin(16,2);
   #endif    
   }
 
+#if USE_GSM  
   void SMS()
   {
     if(started)
@@ -549,18 +299,7 @@
                 DS3231_setDateTime(year(),month(),day(),hour(),minute(),second());
               }
             }
-            else if(strstr(smsbuffer,"BILL"))
-            {
-              String stringOne = "BILL IN PHP="+String(Total_WattHr*peso_per_kw/1000.0f,5);
-              stringOne.toCharArray(smsbuffer,160);
-              sms.SendSMS(phone_n, smsbuffer);
-            }
-            else if(strstr(smsbuffer,"KW"))
-            {
-              String stringOne = "KW-Hr="+String(Total_WattHr/1000.0f,5);
-              stringOne.toCharArray(smsbuffer,160);
-              sms.SendSMS(phone_n, smsbuffer);
-            }
+          #if USE_REPORT
             else if(strstr(smsbuffer,"REPORT"))
             {
               char *pReport = strstr(smsbuffer,"REPORT");
@@ -598,50 +337,23 @@
               }
               report_sent = 0;
             }
+          #endif  
             else 
             {
-              char *pLOAD = strstr(smsbuffer,"LOAD");
-              if(pLOAD)
+              char *pPIN = strstr(smsbuffer, "PIN");
+              if (pPIN)
               {
-                pLOAD += 4;
-                int loadCredit = String(pLOAD).toInt();
-                if ((loadCredit>0)&&(loadCredit<10000))
+                pPIN += 3;
+                String passnew(pPIN);
+                if (passnew.length() > 0)
                 {
-                  Credit_WattHr += loadCredit;
-                  String stringOne = "Loaded"+String(loadCredit);
-                #if 1
-                  lcd.setCursor(0,2);
-                  lcd.print(stringOne);
-                  lcd.print(F("     "));
-                #endif
-                  stringOne.toCharArray(smsbuffer,160);
+                  String stringOne = "New PIN:" + passnew;
+                  lcd.setCursor(0, 2);
+                  lcd.print(F("PIN was changed."));
+                  stringOne.toCharArray(smsbuffer, 160);
                   sms.SendSMS(phone_n, smsbuffer);
-                #if USE_RTC
-                  if (Credit_WattHr>86000.0f) Credit_WattHr = 86000.0f;
-                  time_t t = Credit_WattHr;
-                  DS3231_saveAlarmOne(t);
-                #endif
-                }
-              }
-              else
-              {
-                char *pPIN = strstr(smsbuffer,"PIN");
-                if(pPIN)
-                {
-                  pPIN += 3;
-                  String passnew(pPIN);
-                  if (passnew.length()>0)
-                  {
-                    String stringOne = "New PIN:"+passnew;
-                  #if 1
-                    lcd.setCursor(0,2);
-                    lcd.print(F("PIN was changed."));
-                  #endif
-                    stringOne.toCharArray(smsbuffer,160);
-                    sms.SendSMS(phone_n, smsbuffer);
-                    password = passnew;
-                    Set_EEPROM_password(password);
-                  }
+                  password = passnew;
+                  Set_EEPROM_password(password);
                 }
               }
             }
@@ -651,26 +363,15 @@
       }
       else
       {
+        #if USE_REPORT
         if (send_report)
         {
           send_report = 0;
           report_sent = 0xFF;
           lcd.setCursor(0,2);
           lcd.print(F("Sending report..."));
-          char smsbuffer[160];
-          float usage = Total_WattHr * PesoPerWatt;
-          String stringOne = String(DateText)+String(F("\r\n"))+String(TimeText)+String(F("\r\n"));
-          String stringTwo = String(F("KW-Hr="))+String(Total_WattHr/1000.0f,5);
-          String stringThree = String(F(" Pesos="))+String(usage,2);
-          stringOne.concat(stringTwo);
-          stringOne.concat(stringThree);
-          stringOne.toCharArray(smsbuffer,160);
-          sms.SendSMS(phone_book[DEFAULT_NUMBER],smsbuffer);
-          Total_WattHr = 0.0f;
-          time_t t = Total_WattHr;
-          DS3231_saveAlarmTwo(t);
-          PA2_reset();
         }
+        #endif
       }
     }
   }
@@ -689,6 +390,7 @@
     }
     return false;
   }
+#endif
 
   char bRestart;
   
@@ -697,49 +399,17 @@
     if (bRestart)
     {
       bRestart = 0;
-      gsm.begin(9600);
       LCDInit();
     }
 
     lcd.clear();
     lcd.setCursor(0,0);
-    lcd.print(F("Total KWHr ="));
-    lcd.print(String(Total_WattHr/1000.0f,5));
+    // lcd.print(F("Total KWHr ="));
+    // lcd.print(String(Total_WattHr/1000.0f,5));
 
     lcd.setCursor(0,1);
-    lcd.print(F("Credit KWHr="));
-    lcd.print(Credit_WattHr/1000.0f,5);
-    
-    lcd.setCursor(0,2);
-#if 0
-    String stringOne(F("Report Time - "));
-    AddReportTime(stringOne);
-    lcd.print(stringOne);
-#endif    
+  
     UpdateTime();
-    
-    if (Credit_WattHr>0)
-    {
-      digitalWrite(LED_BUILTIN,HIGH);
-      if (RelayON!=true)
-      {
-        RelayON = true;
-        digitalWrite(RelayPin,HIGH);
-        PA2_start();
-        bRestart = 0xFF;
-      }
-    }
-    else
-    {
-      Credit_WattHr = 0;
-      digitalWrite(LED_BUILTIN,LOW);
-      if (RelayON!=false)
-      {
-        RelayON = false;
-        digitalWrite(RelayPin,LOW);
-        bRestart = 0xFF;
-      }
-    }
   }
 
   void UpdateTime(void)
@@ -807,30 +477,11 @@
     lcd.setCursor(11,3);
     lcd.print(TimeText);
 
+    #if USE_REPORT
     DailyReport();
+    #endif
   }
 
-  void Save2Log(String logString)
-  {
-  #if USE_SDCARD 
-    if (card_present)
-    {
-      File dataFile = SD.open("logfile.txt", FILE_WRITE);
-      // if the file is available, write to it:
-      if (dataFile) 
-      {
-        dataFile.println(logString);
-        dataFile.close();
-      }
-      else 
-      {
-        lcd.setCursor(0,3);
-        lcd.print(F("Cannot open logfile."));
-      }
-    }
-  #endif
-  }
-  
   void LCD_PIN_reject(void)
   {
     lcd.clear();
@@ -839,6 +490,7 @@
     delay(2000);
   }
 
+  #if USE_REPORT
   void DailyReport(void)
   {
     time_t tm = now();
@@ -877,26 +529,6 @@
     }
     stringOne.concat(String((int)ReportMins));
   }
-
-  void PA2_start(void)
-  {
-    PA2_Serial.write(0x02);
-    PA2_Serial.print(F("M2"));
-    PA2_Serial.write(0x03);
-  }
-  
-  void PA2_stop(void)
-  {
-    PA2_Serial.write(0x02);
-    PA2_Serial.print(F("M3"));
-    PA2_Serial.write(0x03);
-  }
-  
-  void PA2_reset(void)
-  {
-    PA2_Serial.write(0x02);
-    PA2_Serial.print(F("R"));
-    PA2_Serial.write(0x03);
-  }
+  #endif
   
 
