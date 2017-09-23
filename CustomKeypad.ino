@@ -19,8 +19,8 @@ char hexaKeys[ROWS][COLS] = {
   {'7','8','9','C'},
   {'*','0','#','D'}
 };
-byte rowPins[ROWS] = {12, 11, 10, 9}; //connect to the row pinouts of the keypad
-byte colPins[COLS] = {7, 6, 5, 4}; //connect to the column pinouts of the keypad
+byte rowPins[ROWS] = {5, 4, 3, 2}; //connect to the row pinouts of the keypad
+byte colPins[COLS] = {9, 8, 7, 6}; //connect to the column pinouts of the keypad
 
 //initialize an instance of class NewKeypad
 Keypad customKeypad = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS); 
@@ -28,16 +28,20 @@ Keypad customKeypad = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS
 #ifndef USE_KEYPAD
 
 #include <Wire.h>
-#include <LiquidCrystal_PCF8574.h>
-LiquidCrystal_PCF8574 lcd(0x27);
+#include "rgb_lcd.h"
+
+rgb_lcd lcd;
+
+const int colorR = 64;
+const int colorG = 64;
+const int colorB = 64;
 
 String password("12345678");
 
 void setup(){
   Serial.begin(9600);
-  lcd.begin(20,4);
-  lcd.setCursor(0,0);
-  lcd.print(F("    Hello World    "));
+  lcd.begin(16,2);
+  lcd.setRGB(colorR, colorG, colorB);
 }
   
 void loop(){
@@ -47,18 +51,6 @@ void loop(){
     Serial.print(customKey);
     switch (customKey) {
     case 'A':
-      if (GetPassword(password))
-      {
-        lcd.clear();
-        lcd.setCursor(0,0);
-        lcd.print(F(" Password accepted. "));
-      }
-      else
-      {
-        lcd.clear();
-        lcd.setCursor(0,0);
-        lcd.print(F(" Password rejected. "));
-      }
       break;
     case 'B':
       break;
