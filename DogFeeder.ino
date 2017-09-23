@@ -40,7 +40,7 @@
   
   #include <Wire.h>
 #if USE_RGB_LCD
-  #include "rgb_lcd.h"
+  #include "src/rgb_lcd.h"
 #else
   //#include <LiquidCrystal_I2C.h>
   #include "LiquidCrystal_PCF8574.h"
