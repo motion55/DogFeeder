@@ -1,10 +1,10 @@
  
   //
-  #define USE_GSM     1
+  #define USE_GSM     0
   #define USE_KEYPAD  1
   #define USE_FEEDER  1
   #define USE_RGB_LCD 1
-  #define USE_YIELD   1 
+  #define USE_YIELD   0
   
   // include the library code:
 #if USE_GSM  
@@ -46,20 +46,6 @@
   #include "LiquidCrystal_PCF8574.h"
 #endif
 
-  /*The circuit:
-  * LCD RS pin to digital pin 10
-  * LCD R/W pin to GND
-  * LCD Enable pin to digital pin 9
-  * LCD D4 pin to digital pin 7
-  * LCD D5 pin to digital pin 6
-  * LCD D6 pin to digital pin 5
-  * LCD D7 pin to digital pin 4
-  * LCD VSS pin to ground
-  * LCD VCC pin to 5V
-  * 10K resistor:
-  * ends to +5V and ground
-  * wiper to LCD VO pin (pin 3)
-  */
   // initialize the library with the numbers of the interface pins
 #if defined(LiquidCrystal_I2C_h)
   LiquidCrystal_I2C lcd(0x27,16,2);
@@ -83,6 +69,12 @@
 #endif  
 
 #if USE_KEYPAD
+  typedef struct {
+    uint8_t Second; 
+    uint8_t Minute; 
+    uint8_t Hour; 
+  } HrsMinsSecs_t;
+
   #include <Keypad.h>
   extern Keypad customKeypad; 
   boolean Unlocked; 
@@ -91,7 +83,8 @@
   String GetNewPassword(void);
   String Get_EEPROM_password(void);
   void Set_EEPROM_password(String passwd);
-#endif  
+  char GetTime(HrsMinsSecs_t* HrsMinsSecsPtr);
+  #endif  
 
   #include <Time.h>
   
@@ -106,7 +99,7 @@
 
   void setup() {
     // put your setup code here, to run once:
-    //SerialUSB.begin(9600);
+    Serial.begin(9600);
     i = 0;
     j = 0;
     k = 0;
@@ -176,7 +169,9 @@
     
     LCD_refresh();
     
+    #if USE_YIELD
     bYieldEnable = true;
+    #endif
   }
   
   void loop() {
@@ -200,10 +195,25 @@
     char customKey = customKeypad.getKey();
     
     if (customKey){
+      Serial.print(customKey);
       switch (customKey) {
       case 'A':
         if (CheckPassword(password))
         {
+          lcd.setCursor(0,0);
+          //                  0123456789012345
+          String PromptStr(F(" Set Feed Time. "));
+          lcd.print(PromptStr);
+          HrsMinsSecs_t HrsMinsSecs;
+          HrsMinsSecs.Hour = FeedHours;
+          HrsMinsSecs.Minute = FeedMins;
+          if (GetTime(&HrsMinsSecs))
+          {
+            FeedHours = HrsMinsSecs.Hour;
+            FeedMins = HrsMinsSecs.Minute;
+            EEPROM.update(FEEDER_HOUR_ADDR, FeedHours);
+            EEPROM.update(FEEDER_MIN_ADDR, FeedMins);
+          }
         }
         else
         {
@@ -213,6 +223,20 @@
       case 'B':
         if (CheckPassword(password))
         {
+          lcd.setCursor(0,0);
+          //                  0123456789012345
+          String PromptStr(F(" Set Feed Time. "));
+          lcd.print(PromptStr);
+          HrsMinsSecs_t HrsMinsSecs;
+          HrsMinsSecs.Hour = FeedHours;
+          HrsMinsSecs.Minute = FeedMins;
+          if (GetTime(&HrsMinsSecs))
+          {
+            FeedHours = HrsMinsSecs.Hour;
+            FeedMins = HrsMinsSecs.Minute;
+            EEPROM.update(FEEDER_HOUR_ADDR, FeedHours);
+            EEPROM.update(FEEDER_MIN_ADDR, FeedMins);
+          }
         }
         else
         {
@@ -222,6 +246,23 @@
       case 'C':
         if (CheckPassword(password))
         {
+          lcd.setCursor(0,0);
+          //                  0123456789012345
+          String PromptStr(F(" Adjust the RTC "));
+          lcd.print(PromptStr);
+          time_t tm = now();
+          HrsMinsSecs_t HrsMinsSecs;
+          HrsMinsSecs.Hour = hour(tm);
+          HrsMinsSecs.Minute = minute(tm);
+          if (GetTime(&HrsMinsSecs))
+          {
+            int HourVal = HrsMinsSecs.Hour;
+            if ((HourVal<0)||(HourVal>23)) HourVal = hour();
+            int MinVal = HrsMinsSecs.Minute;
+            if ((MinVal<0)||(MinVal>59)) MinVal = minute();
+            setTime(HourVal,MinVal,second(),day(),month(),year());
+            DS3231_setDateTime(year(),month(),day(),hour(),minute(),second());
+          }
         }
         else
         {
@@ -245,6 +286,7 @@
         break;
       }
     }
+    delay(5);
     #endif
   }
     
@@ -419,6 +461,13 @@
 
     lcd.clear();
     UpdateTime();
+    
+    #if USE_FEEDER
+    lcd.setCursor(0,1);
+    String stringOne(F("Feed:"));;
+    AddReportTime(stringOne);
+    lcd.print(stringOne);
+    #endif
   }
 
   void UpdateTime(void)
@@ -494,7 +543,8 @@
   {
     lcd.clear();
     lcd.setCursor(0,1);
-    lcd.print(F(" Password rejected. "));
+    //          "0123456789012345" 
+    lcd.print(F(" PIN rejected..."));
     delay(2000);
   }
 

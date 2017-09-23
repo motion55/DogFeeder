@@ -38,6 +38,12 @@ const int colorB = 64;
 
 String password("12345678");
 
+typedef struct {
+  uint8_t Second; 
+  uint8_t Minute; 
+  uint8_t Hour; 
+} HrsMinsSecs_t;
+
 void setup(){
   Serial.begin(9600);
   lcd.begin(16,2);
@@ -51,6 +57,7 @@ void loop(){
     Serial.print(customKey);
     switch (customKey) {
     case 'A':
+      GetTime();
       break;
     case 'B':
       break;
@@ -69,15 +76,13 @@ boolean CheckPassword(String passwd)
   boolean result = false;
   lcd.clear();
   lcd.setCursor(0,0);
-             //01234567890123456789
-  lcd.print(F("   Enter the PIN.   "));
-  lcd.setCursor(0,1);
-  lcd.print(F("    then press #.   "));
+             //0123456789012345
+  lcd.print(F("Enter the PIN.  "));
 #if 0  
   lcd.setCursor(0,3);
   lcd.print(Get_EEPROM_password());
 #endif  
-  lcd.setCursor(0,2);
+  lcd.setCursor(0,1);
   char done = 0;
   while (!done) {
     char customKey = customKeypad.getKey();
@@ -140,44 +145,6 @@ String GetNewPassword(void)
   return passwd;
 }
 
-float GetWattHr(boolean bLoad)
-{
-  String sLoad;
-  float fLoad = 0.0f;
-  lcd.clear();
-  lcd.setCursor(0,0);
-               //01234567890123456789
-  if (bLoad)
-    lcd.print(F(" Enter WHr to load  "));
-  else
-    lcd.print(F(" Enter WHr to unload"));
-  lcd.setCursor(0,1);
-  lcd.print(F("    then press #.   "));
-  lcd.setCursor(0,2);
-  char done = 0;
-  while (!done) {
-    char customKey = customKeypad.getKey();
-    if (customKey==0) continue;
-    if ((customKey>='0')&&(customKey<='9'))
-    {
-      sLoad += customKey;
-      lcd.write(customKey);
-      if (sLoad.length()>20) done = true;
-    }
-    else
-    if (customKey>='#') 
-    {
-      done = true;
-      fLoad = sLoad.toInt();
-    }
-    else
-    {
-      done = true;
-    }
-  }
-  return fLoad;
-}
-
 #ifndef PASSWORD_ADDR
 #define PASSWORD_ADDR 0
 #endif
@@ -219,4 +186,85 @@ void Set_EEPROM_password(String passwd)
   EEPROM.update(addr,0xFF);
 }
 
+char GetTime(HrsMinsSecs_t* HrsMinsSecsPtr)
+{
+  //               "0123456789012345"
+  String timestr(F("Hour:Min->"));
+  if (HrsMinsSecsPtr->Hour<10) {
+    timestr += String('0');
+  }
+  timestr += String(HrsMinsSecsPtr->Hour)+String(':');
+  if (HrsMinsSecsPtr->Minute<10) {
+    timestr += String('0');
+  }
+  timestr += String(HrsMinsSecsPtr->Minute)+String(' ');
+  lcd.setCursor(0,1);
+  lcd.print(timestr);
+  char done = 0;
+  char cursor_pos = 10;
+  lcd.setCursor(cursor_pos,1);
+  lcd.cursor();
+  lcd.blink();
+  while (!done) {
+    char customKey = customKeypad.getKey();
+    if (customKey==0) continue;
+    if ((customKey>='0')&&(customKey<='9'))
+    {
+      switch (cursor_pos) {
+      default:
+        cursor_pos = 10;
+      case 10:
+        if (customKey<'3') 
+        {
+          timestr[10] = customKey;
+          cursor_pos++;
+        }
+        break;
+      case 11:
+        if (timestr[10]<'2') {
+          timestr[11] = customKey;
+          cursor_pos+=2;
+        }
+        else if (customKey<'4') {
+          timestr[11] = customKey;
+          cursor_pos+=2;
+        }
+        break;
+      case 13:
+        if (customKey<'6') 
+        {
+          timestr[13] = customKey;
+          cursor_pos++;
+        }
+        break;
+      case 14:
+        timestr[14] = customKey;
+        cursor_pos = 10;
+        break;
+      }
+      lcd.setCursor(0,1);
+      lcd.print(timestr);
+      lcd.setCursor(cursor_pos,1);
+    }
+    else
+    if (customKey=='#') 
+    {
+      HrsMinsSecsPtr->Hour = timestr.substring(10,12).toInt();
+      HrsMinsSecsPtr->Minute = timestr.substring(13,15).toInt();
+      Serial.println(F("Value accepted"));
+      Serial.print(HrsMinsSecsPtr->Hour);
+      Serial.print(':');
+      Serial.println(HrsMinsSecsPtr->Minute);
+      done = true;
+    }
+    else 
+    {
+      Serial.println(F("Value accpted"));
+      break;
+    }
+  }
+  lcd.noCursor();
+  lcd.noBlink();
 
+  return done;
+}
