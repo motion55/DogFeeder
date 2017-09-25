@@ -1,10 +1,10 @@
  
   //
-  #define USE_GSM     0
+  #define USE_GSM     1
   #define USE_KEYPAD  1
   #define USE_FEEDER  1
-  #define USE_RGB_LCD 1
-  #define USE_YIELD   0
+  #define USE_RGB_LCD 0
+  #define USE_YIELD   1
   
   // include the library code:
 #if USE_GSM  
@@ -12,7 +12,7 @@
   #include "src/sms.h"
   SMSGSM sms;
   boolean started=false;
-  #define DEFAULT_NUMBER  0 // 0 or 1
+  #define DEFAULT_NUMBER  1 // 0 or 1
   #define SMS_TARGET0 "09217755043" //<-use your own number 
   #define SMS_TARGET1 "09297895641"
   #define SMS_TARGET2 "00000000000" //spare
@@ -24,18 +24,23 @@
 #if USE_FEEDER
   #include <EEPROM.h>
 
-  #define FEEDER_HOUR_ADDR 30
-  #define FEEDER_MIN_ADDR  31
+  #define FEED1_HOUR_ADDR 30
+  #define FEED1_MIN_ADDR  31
+  #define FEED2_HOUR_ADDR 32
+  #define FEED2_MIN_ADDR  33
   
-  #define FEEDER_HOUR 0
-  #define FEEDER_MIN  0
-  #define FEEDER_SEC  0
+  #define FEED_HOUR1  8
+  #define FEED_HOUR2  18
+  #define FEED_MIN    0
 
   char feed_dog = 0;
   char dog_fed = 0;
   
-  char FeedHours = FEEDER_HOUR;
-  char FeedMins = FEEDER_MIN;
+  char FeedHours1 = FEED_HOUR1;
+  char FeedMins1 = FEED_MIN;
+  
+  char FeedHours2 = FEED_HOUR2;
+  char FeedMins2 = FEED_MIN;
 #endif
   
   #include <Wire.h>
@@ -90,13 +95,13 @@
   
   char DateText[] = "02/22/2017 \0";
   //                 01234567890
-  char TimeText[] = "00:00:00a\0";
+  char TimeText[] = "00:00:00 \0";
   //                 123456789
   
-#if USE_YIELD
+  #if USE_YIELD
   boolean bYieldEnable = false;
-#endif  
-
+  #endif
+  
   void setup() {
     // put your setup code here, to run once:
     Serial.begin(9600);
@@ -123,19 +128,24 @@
   #endif    
   
   #if USE_FEEDER
-    unsigned char HourVal = EEPROM.read(FEEDER_HOUR_ADDR);
-    unsigned char MinVal = EEPROM.read(FEEDER_MIN_ADDR);
-    if ((HourVal<24)&&(MinVal<60))
+    FeedHours1 = EEPROM.read(FEED1_HOUR_ADDR);
+    FeedMins1 = EEPROM.read(FEED1_MIN_ADDR);
+    if ((FeedHours1>=24)||(FeedMins1>=60))
     {
-      FeedHours = HourVal;
-      FeedMins = MinVal;
+      FeedHours1 = FEED_HOUR1;
+      FeedMins1 = FEED_MIN;
+      EEPROM.update(FEED1_HOUR_ADDR, FeedHours1);
+      EEPROM.update(FEED1_MIN_ADDR, FeedMins1);
     }
-    else
+
+    FeedHours2 = EEPROM.read(FEED2_HOUR_ADDR);
+    FeedMins2 = EEPROM.read(FEED2_MIN_ADDR);
+    if ((FeedHours2>=24)||(FeedMins2>=60))
     {
-      HourVal = FEEDER_HOUR;
-      MinVal = FEEDER_MIN;
-      EEPROM.update(FEEDER_HOUR_ADDR, HourVal);
-      EEPROM.update(FEEDER_MIN_ADDR, MinVal);
+      FeedHours2 = FEED_HOUR2;
+      FeedMins2 = FEED_MIN;
+      EEPROM.update(FEED2_HOUR_ADDR, FeedHours2);
+      EEPROM.update(FEED2_MIN_ADDR, FeedMins2);
     }
   #endif    
   
@@ -202,17 +212,17 @@
         {
           lcd.setCursor(0,0);
           //                  0123456789012345
-          String PromptStr(F(" Set Feed Time. "));
+          String PromptStr(F(" Set Feed1 Time."));
           lcd.print(PromptStr);
           HrsMinsSecs_t HrsMinsSecs;
-          HrsMinsSecs.Hour = FeedHours;
-          HrsMinsSecs.Minute = FeedMins;
+          HrsMinsSecs.Hour = FeedHours1;
+          HrsMinsSecs.Minute = FeedMins1;
           if (GetTime(&HrsMinsSecs))
           {
-            FeedHours = HrsMinsSecs.Hour;
-            FeedMins = HrsMinsSecs.Minute;
-            EEPROM.update(FEEDER_HOUR_ADDR, FeedHours);
-            EEPROM.update(FEEDER_MIN_ADDR, FeedMins);
+            FeedHours1 = HrsMinsSecs.Hour;
+            FeedMins1 = HrsMinsSecs.Minute;
+            EEPROM.update(FEED1_HOUR_ADDR, FeedHours1);
+            EEPROM.update(FEED1_MIN_ADDR, FeedMins1);
           }
         }
         else
@@ -225,17 +235,17 @@
         {
           lcd.setCursor(0,0);
           //                  0123456789012345
-          String PromptStr(F(" Set Feed Time. "));
+          String PromptStr(F(" Set Feed2 Time."));
           lcd.print(PromptStr);
           HrsMinsSecs_t HrsMinsSecs;
-          HrsMinsSecs.Hour = FeedHours;
-          HrsMinsSecs.Minute = FeedMins;
+          HrsMinsSecs.Hour = FeedHours2;
+          HrsMinsSecs.Minute = FeedMins2;
           if (GetTime(&HrsMinsSecs))
           {
-            FeedHours = HrsMinsSecs.Hour;
-            FeedMins = HrsMinsSecs.Minute;
-            EEPROM.update(FEEDER_HOUR_ADDR, FeedHours);
-            EEPROM.update(FEEDER_MIN_ADDR, FeedMins);
+            FeedHours2 = HrsMinsSecs.Hour;
+            FeedMins2 = HrsMinsSecs.Minute;
+            EEPROM.update(FEED2_HOUR_ADDR, FeedHours2);
+            EEPROM.update(FEED2_MIN_ADDR, FeedMins2);
           }
         }
         else
@@ -286,7 +296,9 @@
         break;
       }
     }
-    delay(5);
+    #endif
+    #if USE_YIELD
+    yield();
     #endif
   }
     
@@ -300,7 +312,7 @@
     lcd.init();
     lcd.backlight();
   #elif defined(LiquidCrystal_PCF8574_h)
-    lcd.begin(16,2);
+    lcd.begin(20,4);
     lcd.setBacklight(255);
   #else
     lcd.begin(16,2);
@@ -372,14 +384,32 @@
                   int tempMin = sMin.toInt();
                   if ((tempHour<24)&&(tempMin<60))
                   {
-                    FeedHours = tempHour;
-                    FeedMins = tempMin;
-                    String stringOne(F("Set Feed Time "));
-                    AddReportTime(stringOne);
+                    String stringOne(F("Set "));
+                    if (tempHour<12) {
+                      FeedHours1 = tempHour;
+                      FeedMins1 = tempMin;
+                      EEPROM.update(FEED1_HOUR_ADDR, FeedHours1);
+                      EEPROM.update(FEED1_MIN_ADDR, FeedMins1);
+                      stringOne.concat(F("Feed1 Time"));
+                    } else {
+                      FeedHours2 = tempHour;
+                      FeedMins2 = tempMin;
+                      EEPROM.update(FEED2_HOUR_ADDR, FeedHours2);
+                      EEPROM.update(FEED2_MIN_ADDR, FeedMins2);
+                      stringOne.concat(F("Feed2 Time"));
+                    }
+                    if (tempHour<10) {
+                      stringOne.concat('0');
+                    }
+                    stringOne.concat(String(tempHour));
+                    if (tempMin<10) {
+                      stringOne.concat(F(":0"));
+                    } else {
+                      stringOne.concat(':');
+                    }
+                    stringOne.concat(String(tempMin));
                     stringOne.toCharArray(smsbuffer,160);
                     sms.SendSMS(phone_n, smsbuffer);
-                    EEPROM.update(FEEDER_HOUR_ADDR, FeedHours);
-                    EEPROM.update(FEEDER_MIN_ADDR, FeedMins);
                   }
                 }
               }
@@ -464,9 +494,9 @@
     
     #if USE_FEEDER
     lcd.setCursor(0,1);
-    String stringOne(F("Feed:"));;
-    AddReportTime(stringOne);
-    lcd.print(stringOne);
+    lcd.print(F("Feed:"));
+    lcd.print(FeedTimeStr());
+    DogFeeder();
     #endif
   }
 
@@ -474,36 +504,27 @@
   {
     time_t tm = now();
       
-    int hour = hourFormat12(tm);
-    if (hour < 10)
+    char hr = hour(tm);
+    if (hr < 10)
     {
       TimeText[0] = ' ';
-      TimeText[1] = '0' + hour;
+      TimeText[1] = '0' + hr;
     }
     else
     {
       TimeText[0] = '1';
-      TimeText[1] = '0' + (hour - 10);
+      TimeText[1] = '0' + (hr - 10);
     }
   
-    int min = minute(tm);
-    int min10 = min / 10;
+    char min = minute(tm);
+    char min10 = min / 10;
     TimeText[3] = '0' + min10;
     TimeText[4] = '0' + min - (min10 * 10);
   
-    int sec = second(tm);
-    int sec10 = sec / 10;
+    char sec = second(tm);
+    char sec10 = sec / 10;
     TimeText[6] = '0' + sec10;
     TimeText[7] = '0' + sec - (sec10 * 10);
-    
-    if (isAM(tm))
-    {
-      TimeText[8] = 'a';
-    }
-    else
-    {
-      TimeText[8] = 'p';
-    }
     
     int mon = month(tm);
     if (mon > 9)
@@ -533,10 +554,6 @@
     lcd.setCursor(0,0);
     lcd.print(F("Time:"));
     lcd.print(TimeText);
-
-    #if USE_FEEDER
-    DogFeeder();
-    #endif
   }
 
   void LCD_PIN_reject(void)
@@ -552,17 +569,13 @@
   void DogFeeder(void)
   {
     time_t tm = now();
-    
-    if (hour(tm)==FeedHours)
+    char hrs = hour(tm);
+    char min = minute(tm);
+     
+    if (((hrs==FeedHours1)&&(min==FeedMins1))
+    || ((hrs==FeedHours2)&&(min==FeedMins2)))
     {
-      if (minute(tm)==FeedMins)
-      {
-        if (!dog_fed) feed_dog = 0xFF;
-      }
-      else
-      {
-        dog_fed = 0;
-      }
+      if (!dog_fed) feed_dog = 0xFF;
     }
     else
     {
@@ -570,8 +583,31 @@
     }
   }
 
-  void AddReportTime(String &stringOne)
+  String FeedTimeStr(void)
   {
+    int timesec = (now()/60)%1440;
+    int FeedTime1 = (FeedHours1*60)+FeedMins1;
+    int FeedTime2 = (FeedHours2*60)+FeedMins2;
+    if (FeedTime1<=FeedTime2) {
+      if (timesec<FeedTime1) {
+        timesec = FeedTime1;
+      } else if (timesec<=FeedTime2) {
+        timesec = FeedTime2;
+      } else {
+        timesec = FeedTime1;
+      }
+    } else {
+      if (timesec<=FeedTime2) {
+        timesec = FeedTime2;
+      } else if (timesec<=FeedTime1) {
+        timesec = FeedTime1;
+      } else {
+        timesec = FeedTime2;
+      }
+    }
+    int FeedHours = timesec / 60;
+    int FeedMins = timesec % 60;
+    String stringOne;
     if (FeedHours<10) 
     {
       stringOne.concat('0');
@@ -586,20 +622,22 @@
       stringOne.concat(':');
     }
     stringOne.concat(String((int)FeedMins));
+    return stringOne;
   }
   #endif
   
 #if USE_YIELD
 void yield(void)
 {
-  if (!bYieldEnable) return;
-  bYieldEnable = false;
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis1 > period1) {
-    previousMillis1 = currentMillis;
-    LCD_refresh();
+  if (bYieldEnable) {
+    bYieldEnable = false;
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis1 > period1) {
+      previousMillis1 = currentMillis;
+      UpdateTime();
+    }
+    bYieldEnable = true;
   }
-  bYieldEnable = true;
 }
 #endif
 
