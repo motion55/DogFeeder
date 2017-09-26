@@ -3,7 +3,7 @@
   #define USE_GSM     1
   #define USE_KEYPAD  1
   #define USE_FEEDER  1
-  #define USE_RGB_LCD 0
+  #define USE_RGB_LCD 1
   #define USE_YIELD   1
   
   // include the library code:
@@ -13,8 +13,8 @@
   SMSGSM sms;
   boolean started=false;
   #define DEFAULT_NUMBER  1 // 0 or 1
-  #define SMS_TARGET0 "09217755043" //<-use your own number 
-  #define SMS_TARGET1 "09297895641"
+  #define SMS_TARGET0 "09297895641"
+  #define SMS_TARGET1 "09217755043" //<-use your own number 
   #define SMS_TARGET2 "00000000000" //spare
 
   typedef char phone_number_t[14];
@@ -61,7 +61,7 @@
 #endif  
   int i, j, k;
   long previousMillis1 = 0;
-  const long period1 = 200;
+  const long period1 = 300;
   long previousMillis2 = 0;
   const long period2 = 1000;
   
@@ -70,7 +70,7 @@
   const int RX_pin = 2;
   const int TX_pin = 3;
   #endif
-  const int GSM_ON_pin = 0;
+  const int GSM_ON_pin = A3;
 #endif  
 
 #if USE_KEYPAD
@@ -188,21 +188,25 @@
    // put your main code here, to run repeatedly:
     unsigned long currentMillis = millis();
 
-    if (currentMillis - previousMillis1 > period1) {
-      previousMillis1 = currentMillis;
-      LCD_refresh();
-    }
-    
-    #if USE_GSM  
+      
     if (currentMillis - previousMillis2 > period2) {
       previousMillis2 = currentMillis;
-
+      LCD_refresh();
+      #if USE_GSM  
       SMS();
+      #endif    
+      #if USE_YIELD
+    } else {
+      yield();
+      #endif
     }
-    #endif    
     
     #if USE_KEYPAD
+    #if USE_YIELD
+    char customKey = GetKey();
+    #else
     char customKey = customKeypad.getKey();
+    #endif
     
     if (customKey){
       Serial.print(customKey);
@@ -296,9 +300,6 @@
         break;
       }
     }
-    #endif
-    #if USE_YIELD
-    yield();
     #endif
   }
     
@@ -454,7 +455,7 @@
           lcd.print(F("Feeding Dog..."));
           FeedDog();
           char smsbuffer[160];
-          String stringOne = String(F("Dog was fed on"))+String(TimeText);
+          String stringOne = String(F("Dog was fed on "))+String(TimeText);
           stringOne.toCharArray(smsbuffer,160);
           sms.SendSMS(phone_book[DEFAULT_NUMBER],smsbuffer);
         }
@@ -626,22 +627,34 @@
   }
   #endif
   
-#if USE_YIELD
-void yield(void)
-{
-  if (bYieldEnable) {
-    bYieldEnable = false;
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis1 > period1) {
-      previousMillis1 = currentMillis;
-      UpdateTime();
-    }
-    bYieldEnable = true;
+  #if USE_YIELD
+  char _KeyChar = 0;
+  
+  char GetKey(void)
+  {
+    char KeyChar = _KeyChar;
+    _KeyChar = 0;
+    return KeyChar;
   }
-}
-#endif
 
-void FeedDog(void)
-{
+  void yield(void)
+  {
+    if (bYieldEnable) {
+      bYieldEnable = false;
+      unsigned long currentMillis = millis();
+      if (currentMillis - previousMillis1 > period1) {
+        previousMillis1 = currentMillis;
+        UpdateTime();
+      }
+      char KeyChar = customKeypad.getKey();
+      if (KeyChar!=0) _KeyChar = KeyChar;
 
-}
+      bYieldEnable = true;
+    }
+  }
+  #endif
+
+  void FeedDog(void)
+  {
+
+  }
