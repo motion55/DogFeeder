@@ -23,7 +23,15 @@
   
 #if USE_FEEDER
   #include <EEPROM.h>
+  #include <Servo.h>
+  
+	#define dispenser 11
+  Servo servo;
 
+  const int SwitchLowPin = A0;
+  const int SwitchHighPin = A1;
+  const int SolenoidValve = A2;
+	
   #define FEED1_HOUR_ADDR 30
   #define FEED1_MIN_ADDR  31
   #define FEED2_HOUR_ADDR 32
@@ -33,17 +41,22 @@
   #define FEED_HOUR2  18
   #define FEED_MIN    0
 
+  #define CLEAN_HOUR  18
+  #define CLEAN_MINS  32
+  
   char feed_dog = 0;
   char dog_fed = 0;
+  char cage_clean = 0;
   
   char FeedHours1 = FEED_HOUR1;
   char FeedMins1 = FEED_MIN;
   
   char FeedHours2 = FEED_HOUR2;
   char FeedMins2 = FEED_MIN;
+
 #endif
   
-  #include <Wire.h>
+#include <Wire.h>
 #if USE_RGB_LCD
   #include "src/rgb_lcd.h"
 #else
@@ -147,6 +160,12 @@
       EEPROM.update(FEED2_HOUR_ADDR, FeedHours2);
       EEPROM.update(FEED2_MIN_ADDR, FeedMins2);
     }
+
+    servo.attach(dispenser);
+    pinMode (SwitchLowPin, INPUT_PULLUP);
+    pinMode (SwitchHighPin, INPUT_PULLUP);
+    pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(SolenoidValve, OUTPUT);
   #endif    
   
 #if USE_GSM  
@@ -188,13 +207,12 @@
    // put your main code here, to run repeatedly:
     unsigned long currentMillis = millis();
 
-      
     if (currentMillis - previousMillis2 > period2) {
       previousMillis2 = currentMillis;
       LCD_refresh();
       #if USE_GSM  
       SMS();
-      #endif    
+      #endif
       #if USE_YIELD
     } else {
       yield();
@@ -453,7 +471,7 @@
           dog_fed = 0xFF;
           lcd.setCursor(0,1);
           lcd.print(F("Feeding Dog..."));
-          FeedDog();
+          Dispense();
           char smsbuffer[160];
           String stringOne = String(F("Dog was fed on "))+String(TimeText);
           stringOne.toCharArray(smsbuffer,160);
@@ -567,6 +585,9 @@
   }
 
   #if USE_FEEDER
+  #define PumpOn()  {digitalWrite(LED_BUILTIN, HIGH);}
+  #define PumpOff()  {digitalWrite(LED_BUILTIN, LOW);}
+  
   void DogFeeder(void)
   {
     time_t tm = now();
@@ -582,7 +603,28 @@
     {
       dog_fed = 0;
     }
-  }
+
+    static unsigned long previousMillis = 0;
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis > 15000L) {
+      PumpOff();
+    }
+
+    if ((hrs==CLEAN_HOUR)&&(min==CLEAN_MINS)) {
+      if (!cage_clean)
+      {
+        cage_clean = true;
+        previousMillis = currentMillis;
+        PumpOn();
+        char smsbuffer[160];
+        String stringOne = String(F("Dog cagec was cleaned"));
+        stringOne.toCharArray(smsbuffer,160);
+        sms.SendSMS(phone_book[DEFAULT_NUMBER],smsbuffer);
+    }
+    } else {
+      cage_clean = false;
+    }
+}
 
   String FeedTimeStr(void)
   {
@@ -645,6 +687,7 @@
       if (currentMillis - previousMillis1 > period1) {
         previousMillis1 = currentMillis;
         UpdateTime();
+        FloatSensor();
       }
       char KeyChar = customKeypad.getKey();
       if (KeyChar!=0) _KeyChar = KeyChar;
@@ -654,7 +697,29 @@
   }
   #endif
 
-  void FeedDog(void)
-  {
+  const int stop_position = 95;
+  const int velocity = 20;
+  int stopservo = 90;
 
+   void Dispense()
+  {
+    servo.write(stop_position + velocity);
+    delay(1500); //Dispense for 15 seconds
+    servo.write(stopservo);
   }
+
+  void FloatSensor()
+  {
+    if (digitalRead(SwitchLowPin) == LOW) {
+      //digitalWrite(LED_BUILTIN, LOW);
+      digitalWrite(SolenoidValve, LOW);
+      Serial.println ("SOLENOID CLOSED.");
+    }
+    else if (digitalRead(SwitchHighPin) == LOW)
+    {
+      //digitalWrite(LED_BUILTIN, HIGH);
+      digitalWrite(SolenoidValve, HIGH);
+      Serial.println("SOLANOID OPEN.");
+    }
+  }
+  
