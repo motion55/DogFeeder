@@ -434,9 +434,9 @@
               }
               else
               {
-                feed_dog = 0xFF;
+                feed_dog = true;
               }
-              dog_fed = 0;
+              dog_fed = false;
             }
           #endif  
             else 
@@ -461,23 +461,6 @@
           }
           sms.DeleteSMS(pos); //after reading, delete SMS
         }  
-      }
-      else
-      {
-        #if USE_FEEDER
-        if (feed_dog)
-        {
-          feed_dog = 0;
-          dog_fed = 0xFF;
-          lcd.setCursor(0,1);
-          lcd.print(F("Feeding Dog..."));
-          Dispense();
-          char smsbuffer[160];
-          String stringOne = String(F("Dog was fed on "))+String(TimeText);
-          stringOne.toCharArray(smsbuffer,160);
-          sms.SendSMS(phone_book[DEFAULT_NUMBER],smsbuffer);
-        }
-        #endif
       }
     }
   }
@@ -585,34 +568,57 @@
   }
 
   #if USE_FEEDER
-  #define PumpOn()  {digitalWrite(LED_BUILTIN, HIGH);}
-  #define PumpOff()  {digitalWrite(LED_BUILTIN, LOW);}
+ 
+  void PumpOn() {
+    digitalWrite(LED_BUILTIN, HIGH);
+  }
+
+  void PumpOff() {
+    digitalWrite(LED_BUILTIN, LOW);
+  }
   
+  const int stop_position = 95;
+  const int velocity = 20;
+  int stopservo = 90;
+
   void DogFeeder(void)
   {
     time_t tm = now();
     char hrs = hour(tm);
     char min = minute(tm);
-     
+    unsigned long currentMillis = millis();
+    
     if (((hrs==FeedHours1)&&(min==FeedMins1))
-    || ((hrs==FeedHours2)&&(min==FeedMins2)))
+    || ((hrs==FeedHours2)&&(min==FeedMins2))
+    || (feed_dog))
     {
-      if (!dog_fed) feed_dog = 0xFF;
+      static unsigned long previousMillis = 0;
+      if (!dog_fed)  {
+        dog_fed = true;
+        previousMillis = currentMillis;
+        servo.write(stop_position + velocity);  //Feeder open
+        lcd.setCursor(0,1);
+        lcd.print(F("Feeding Dog..."));
+        char smsbuffer[160];
+        String stringOne = String(F("Dog was fed on "))+String(TimeText);
+        stringOne.toCharArray(smsbuffer,160);
+        sms.SendSMS(phone_book[DEFAULT_NUMBER],smsbuffer);
+      } else {
+        if (currentMillis - previousMillis >= 1500L) {
+          servo.write(stopservo);   //Close feeder
+          feed_dog = false;
+        }
+      }
     }
     else
     {
-      dog_fed = 0;
+      dog_fed = false;
     }
 
-    static unsigned long previousMillis = 0;
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis > 15000L) {
-      PumpOff();
-    }
-
-    if ((hrs==CLEAN_HOUR)&&(min==CLEAN_MINS)) {
-      if (!cage_clean)
-      {
+    if ((hrs==CLEAN_HOUR)&&(min==CLEAN_MINS)) 
+    {
+      static unsigned long previousMillis = 0;
+      if (!cage_clean) {
         cage_clean = true;
         previousMillis = currentMillis;
         PumpOn();
@@ -620,8 +626,14 @@
         String stringOne = String(F("Dog cagec was cleaned"));
         stringOne.toCharArray(smsbuffer,160);
         sms.SendSMS(phone_book[DEFAULT_NUMBER],smsbuffer);
+      } else {
+        if (currentMillis - previousMillis >= 15000L) {
+          PumpOff();
+        }
+      }
     }
-    } else {
+    else 
+    {
       cage_clean = false;
     }
 }
@@ -696,17 +708,6 @@
     }
   }
   #endif
-
-  const int stop_position = 95;
-  const int velocity = 20;
-  int stopservo = 90;
-
-   void Dispense()
-  {
-    servo.write(stop_position + velocity);
-    delay(1500); //Dispense for 15 seconds
-    servo.write(stopservo);
-  }
 
   void FloatSensor()
   {
