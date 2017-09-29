@@ -25,13 +25,23 @@
   #include <EEPROM.h>
   #include <Servo.h>
   
-	#define dispenser 11
-  Servo servo;
+	Servo servo;
+
+  const int DHTPIN = 10;
+  const int dispenser = 11;
+  const int switchPin = 12;
 
   const int SwitchLowPin = A0;
   const int SwitchHighPin = A1;
   const int SolenoidValve = A2;
-	
+  const int fanSignal = A4;
+  
+  #include "src/DHT.h"
+
+  #define DHTTYPE   DHT11
+
+  DHT dht(DHTPIN, DHTTYPE);
+  
   #define FEED1_HOUR_ADDR 30
   #define FEED1_MIN_ADDR  31
   #define FEED2_HOUR_ADDR 32
@@ -61,7 +71,7 @@
   #include "src/rgb_lcd.h"
 #else
   //#include <LiquidCrystal_I2C.h>
-  #include "LiquidCrystal_PCF8574.h"
+  #include <LiquidCrystal_PCF8574.h>
 #endif
 
   // initialize the library with the numbers of the interface pins
@@ -74,9 +84,9 @@
 #endif  
   int i, j, k;
   long previousMillis1 = 0;
-  const long period1 = 300;
+  const long period1 = 300; //Used in yield()
   long previousMillis2 = 0;
-  const long period2 = 1000;
+  const long period2 = 1000; //Used for SMS() and LCD_refresh();
   
 #if USE_GSM  
   #ifndef HAVE_HWSERIAL1
@@ -162,11 +172,15 @@
     }
 
     servo.attach(dispenser);
+    pinMode(switchPin, INPUT_PULLUP); 
     pinMode (SwitchLowPin, INPUT_PULLUP);
     pinMode (SwitchHighPin, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(SolenoidValve, OUTPUT);
-  #endif    
+    digitalWrite(SolenoidValve, LOW);
+    pinMode(fanSignal, OUTPUT);
+    digitalWrite(fanSignal, LOW); 
+    #endif    
   
 #if USE_GSM  
     lcd.setCursor(0,1);
@@ -496,9 +510,23 @@
     
     #if USE_FEEDER
     lcd.setCursor(0,1);
+    //           0123456789012345
     lcd.print(F("Feed:"));
     lcd.print(FeedTimeStr());
     DogFeeder();
+
+    int tmp = dht.readTemperature();
+    lcd.setCursor(11,1);
+    lcd.print(tmp);
+    lcd.write(0xDF);
+    lcd.write('C');
+    if (tmp > 36){
+      digitalWrite(fanSignal, HIGH);  //Green LED on, Yellow LED off
+      Serial.println("FAN ON!");
+    } else {
+      digitalWrite(fanSignal, LOW);  //Green LED on, Yellow LED off
+      Serial.println("FAN OFF!");
+    }
     #endif
   }
 
@@ -590,8 +618,7 @@
     
     if (((hrs==FeedHours1)&&(min==FeedMins1))
     || ((hrs==FeedHours2)&&(min==FeedMins2))
-    || (feed_dog))
-    {
+    || (feed_dog)) {
       static unsigned long previousMillis = 0;
       if (!dog_fed)  {
         dog_fed = true;
@@ -609,14 +636,11 @@
           feed_dog = false;
         }
       }
-    }
-    else
-    {
+    } else {
       dog_fed = false;
     }
 
-    if ((hrs==CLEAN_HOUR)&&(min==CLEAN_MINS)) 
-    {
+    if ((hrs==CLEAN_HOUR)&&(min==CLEAN_MINS)) {
       static unsigned long previousMillis = 0;
       if (!cage_clean) {
         cage_clean = true;
@@ -631,9 +655,7 @@
           PumpOff();
         }
       }
-    }
-    else 
-    {
+    } else {
       cage_clean = false;
     }
 }
@@ -699,7 +721,9 @@
       if (currentMillis - previousMillis1 > period1) {
         previousMillis1 = currentMillis;
         UpdateTime();
+        #if USE_FEEDER
         FloatSensor();
+        #endif
       }
       char KeyChar = customKeypad.getKey();
       if (KeyChar!=0) _KeyChar = KeyChar;
@@ -708,6 +732,9 @@
     }
   }
   #endif
+
+  #if USE_FEEDER
+  int switchState = LOW;
 
   void FloatSensor()
   {
@@ -722,5 +749,18 @@
       digitalWrite(SolenoidValve, HIGH);
       Serial.println("SOLANOID OPEN.");
     }
+
+    if (digitalRead(switchPin)==LOW) {
+      if (switchState == HIGH) {            
+        switchState = LOW;
+        char smsbuffer[160];
+        String stringOne = String(F("Feed level is LOW"));
+        stringOne.toCharArray(smsbuffer,160);
+        sms.SendSMS(phone_book[DEFAULT_NUMBER],smsbuffer);
+      }
+    } else {
+      switchState = HIGH;
+    }
   }
+  #endif
   
