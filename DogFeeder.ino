@@ -12,7 +12,7 @@
   #include "src/sms.h"
   SMSGSM sms;
   boolean started=false;
-  #define DEFAULT_NUMBER  1 // 0 or 1
+  #define DEFAULT_NUMBER  USE_RGB_LCD // 0 or 1
   #define SMS_TARGET0 "09297895641"
   #define SMS_TARGET1 "09217755043" //<-use your own number 
   #define SMS_TARGET2 "00000000000" //spare
@@ -36,11 +36,15 @@
   const int SolenoidValve = A2;
   const int fanSignal = A4;
   
+  #if USE_RGB_LCD
   #include "src/DHT.h"
+  #endif
 
+  #ifdef DHT_H
   #define DHTTYPE   DHT11
 
   DHT dht(DHTPIN, DHTTYPE);
+  #endif
   
   #define FEED1_HOUR_ADDR 30
   #define FEED1_MIN_ADDR  31
@@ -51,11 +55,15 @@
   #define FEED_HOUR2  18
   #define FEED_MIN    0
 
+  #define CLEAN_HOUR_ADDR 34
+  #define CLEAN_MINS_ADDR 35
+
   #define CLEAN_HOUR  18
-  #define CLEAN_MINS  32
+  #define CLEAN_MINS  0
   
   char feed_dog = 0;
   char dog_fed = 0;
+  char clean_cage = 0;
   char cage_clean = 0;
   
   char FeedHours1 = FEED_HOUR1;
@@ -64,6 +72,8 @@
   char FeedHours2 = FEED_HOUR2;
   char FeedMins2 = FEED_MIN;
 
+  char CleanHours = CLEAN_HOUR;
+  char CleanMins = CLEAN_MINS;
 #endif
   
 #include <Wire.h>
@@ -171,6 +181,16 @@
       EEPROM.update(FEED2_MIN_ADDR, FeedMins2);
     }
 
+    CleanHours = EEPROM.read(CLEAN_HOUR_ADDR);
+    CleanMins = EEPROM.read(CLEAN_MINS_ADDR);
+    if ((CleanHours>=24)||(CleanMins>=60))
+    {
+      CleanHours = CLEAN_HOUR;
+      CleanMins = CLEAN_MINS;
+      EEPROM.update(CLEAN_HOUR_ADDR, CleanHours);
+      EEPROM.update(CLEAN_MINS_ADDR, CleanMins);
+    }
+    
     servo.attach(dispenser);
     pinMode(switchPin, INPUT_PULLUP); 
     pinMode (SwitchLowPin, INPUT_PULLUP);
@@ -452,6 +472,48 @@
               }
               dog_fed = false;
             }
+            else if(strstr(smsbuffer,"CLEAN"))
+            {
+              char *pReport = strstr(smsbuffer,"CLEAN");
+              pReport += 5;
+              String sHour(pReport);
+              if (sHour.length()>=5)
+              {
+                if (sHour[2]==':')
+                {
+                  int tempHour = sHour.toInt();
+                  pReport += 3;
+                  String sMin(pReport);
+                  int tempMin = sMin.toInt();
+                  if ((tempHour<24)&&(tempMin<60))
+                  {
+                    String stringOne(F("Set "));
+                    CleanHours = tempHour;
+                    CleanMins = tempMin;
+                    EEPROM.update(CLEAN_HOUR_ADDR, CleanHours);
+                    EEPROM.update(CLEAN_MINS_ADDR, CleanMins);
+                    stringOne.concat(F("Clean Time"));
+                    if (tempHour<10) {
+                      stringOne.concat('0');
+                    }
+                    stringOne.concat(String(tempHour));
+                    if (tempMin<10) {
+                      stringOne.concat(F(":0"));
+                    } else {
+                      stringOne.concat(':');
+                    }
+                    stringOne.concat(String(tempMin));
+                    stringOne.toCharArray(smsbuffer,160);
+                    sms.SendSMS(phone_n, smsbuffer);
+                  }
+                }
+              }
+              else
+              {
+                clean_cage = true;
+              }
+              cage_clean = false;
+            }
           #endif  
             else 
             {
@@ -508,14 +570,17 @@
     lcd.clear();
     UpdateTime();
     
-    #if USE_FEEDER
+  #if USE_FEEDER
     lcd.setCursor(0,1);
     //           0123456789012345
     lcd.print(F("Feed:"));
     lcd.print(FeedTimeStr());
-    DogFeeder();
-
+    
+    #ifdef DHT_H
     int tmp = dht.readTemperature();
+    #else
+    int tmp = 36;
+    #endif
     lcd.setCursor(11,1);
     lcd.print(tmp);
     lcd.write(0xDF);
@@ -527,7 +592,9 @@
       digitalWrite(fanSignal, LOW);  //Green LED on, Yellow LED off
       Serial.println("FAN OFF!");
     }
-    #endif
+
+    DogFeeder();
+  #endif
   }
 
   void UpdateTime(void)
@@ -625,7 +692,8 @@
         previousMillis = currentMillis;
         servo.write(stop_position + velocity);  //Feeder open
         lcd.setCursor(0,1);
-        lcd.print(F("Feeding Dog..."));
+        //           0123456789012345
+        lcd.print(F("Feeding Dog...  "));
         char smsbuffer[160];
         String stringOne = String(F("Dog was fed on "))+String(TimeText);
         stringOne.toCharArray(smsbuffer,160);
@@ -640,7 +708,8 @@
       dog_fed = false;
     }
 
-    if ((hrs==CLEAN_HOUR)&&(min==CLEAN_MINS)) {
+    if (((hrs==CleanHours)&&(min==CleanMins))||clean_cage) {
+      clean_cage = false;
       static unsigned long previousMillis = 0;
       if (!cage_clean) {
         cage_clean = true;
