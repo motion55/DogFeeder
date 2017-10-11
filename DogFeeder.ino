@@ -64,7 +64,7 @@
   char feed_dog = 0;
   char dog_fed = 0;
   char clean_cage = 0;
-  char cage_clean = 0;
+  char cage_cleaned = 0;
   
   char FeedHours1 = FEED_HOUR1;
   char FeedMins1 = FEED_MIN;
@@ -512,7 +512,7 @@
               {
                 clean_cage = true;
               }
-              cage_clean = false;
+              cage_cleaned = false;
             }
           #endif  
             else 
@@ -561,6 +561,12 @@
   
   void LCD_refresh()
   {
+    #ifdef DHT_H
+    int tmp = dht.readTemperature();
+    #else
+    int tmp = 36;
+    #endif
+
     if (bRestart)
     {
       bRestart = 0;
@@ -576,11 +582,6 @@
     lcd.print(F("Feed:"));
     lcd.print(FeedTimeStr());
     
-    #ifdef DHT_H
-    int tmp = dht.readTemperature();
-    #else
-    int tmp = 36;
-    #endif
     lcd.setCursor(11,1);
     lcd.print(tmp);
     lcd.write(0xDF);
@@ -686,33 +687,28 @@
     if (((hrs==FeedHours1)&&(min==FeedMins1))
     || ((hrs==FeedHours2)&&(min==FeedMins2))
     || (feed_dog)) {
-      static unsigned long previousMillis = 0;
       if (!dog_fed)  {
         dog_fed = true;
-        previousMillis = currentMillis;
         servo.write(stop_position + velocity);  //Feeder open
         lcd.setCursor(0,1);
         //           0123456789012345
         lcd.print(F("Feeding Dog...  "));
+        delay(1500);
+        servo.write(stopservo);   //Close feeder
+        feed_dog = false;
         char smsbuffer[160];
         String stringOne = String(F("Dog was fed on "))+String(TimeText);
         stringOne.toCharArray(smsbuffer,160);
         sms.SendSMS(phone_book[DEFAULT_NUMBER],smsbuffer);
-      } else {
-        if (currentMillis - previousMillis >= 1500L) {
-          servo.write(stopservo);   //Close feeder
-          feed_dog = false;
-        }
       }
     } else {
       dog_fed = false;
     }
 
     if (((hrs==CleanHours)&&(min==CleanMins))||clean_cage) {
-      clean_cage = false;
       static unsigned long previousMillis = 0;
-      if (!cage_clean) {
-        cage_clean = true;
+      if (!cage_cleaned) {
+        cage_cleaned = true;
         previousMillis = currentMillis;
         PumpOn();
         char smsbuffer[160];
@@ -722,10 +718,11 @@
       } else {
         if (currentMillis - previousMillis >= 15000L) {
           PumpOff();
+          clean_cage = false;
         }
       }
     } else {
-      cage_clean = false;
+      cage_cleaned = false;
     }
 }
 
