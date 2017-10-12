@@ -141,3 +141,8 @@ time_t DS3231_readAlarmTwo(void)
   return t;
 }
 
+float DS3231_GetTemperature(void)
+{
+  RtcTemperature temp = Rtc.GetTemperature();
+  return temp.AsFloat();
+}

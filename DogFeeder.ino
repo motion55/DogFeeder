@@ -37,7 +37,7 @@
   const int fanSignal = A4;
   
   #if USE_RGB_LCD
-  #include "src/DHT.h"
+  //#include "src/DHT.h"
   #endif
 
   #ifdef DHT_H
@@ -564,7 +564,7 @@
     #ifdef DHT_H
     int tmp = dht.readTemperature();
     #else
-    int tmp = 36;
+    int tmp = DS3231_GetTemperature()+0.5f;
     #endif
 
     if (bRestart)
@@ -813,10 +813,10 @@
     {
       //digitalWrite(LED_BUILTIN, HIGH);
       digitalWrite(SolenoidValve, HIGH);
-      Serial.println("SOLANOID OPEN.");
+      Serial.println("SOLENOID OPEN.");
     }
 
-    if (digitalRead(switchPin)==LOW) {
+    if (digitalRead(switchPin)==HIGH) {
       if (switchState == HIGH) {            
         switchState = LOW;
         char smsbuffer[160];
