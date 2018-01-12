@@ -268,3 +268,38 @@ char GetTime(HrsMinsSecs_t* HrsMinsSecsPtr)
 
   return done;
 }
+
+String GetNewPhoneNo(void)
+{
+  String phoneno;
+  lcd.clear();
+  lcd.setCursor(0,0);
+             //01234567890123456789
+  lcd.print(F("   Enter Phone No.  "));
+  lcd.setCursor(0,1);
+  lcd.print(F("    then press #.   "));
+  lcd.setCursor(0,2);
+  char done = 0;
+  while (!done) {
+    char customKey = customKeypad.getKey();
+    if (customKey==0) continue;
+    if ((customKey>='0')&&(customKey<='9'))
+    {
+      phoneno += customKey;
+      lcd.write(customKey);
+      if (phoneno.length()>14) done = true;
+    }
+    else
+    if (customKey=='#') 
+    {
+      done = true;
+    }
+    else
+    {
+      done = true;
+      phoneno = "";
+    }
+  }
+  return phoneno;
+}
+

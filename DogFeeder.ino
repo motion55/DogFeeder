@@ -12,13 +12,13 @@
   #include "src/sms.h"
   SMSGSM sms;
   boolean started=false;
+  #define PHONE_ENTRIES 2
   #define DEFAULT_NUMBER  USE_RGB_LCD // 0 or 1
-  #define SMS_TARGET0 "09297895641"
-  #define SMS_TARGET1 "09473369156" //<-use your own number 
-  #define SMS_TARGET2 "00000000000" //spare
+  #define SMS_TARGET0 "09473369156\0"
+  #define SMS_TARGET1 "09297895641\0" //<-use your own number 
 
   typedef char phone_number_t[14];
-  phone_number_t phone_book[3] = { SMS_TARGET0, SMS_TARGET1, SMS_TARGET2 };
+  phone_number_t phone_book[PHONE_ENTRIES] = { SMS_TARGET0, SMS_TARGET1 };
 #endif
   
 #if USE_FEEDER
@@ -71,7 +71,9 @@
 
   #define CLEAN_HOUR  18
   #define CLEAN_MINS  0
-  
+
+  #define PHONE_BOOK_ADDR  36
+    
   char feed_dog = 0;
   char dog_fed = 0;
   char clean_cage = 0;
@@ -229,6 +231,8 @@
     #endif    
   
 #if USE_GSM  
+    Get_EEPROM_phonenumber();
+    
     lcd.setCursor(0,1);
     //          "0123456789012345"
     lcd.print(F("Initializing GSM"));
@@ -362,6 +366,29 @@
         }
         break;
       case 'D':
+        if (CheckPassword(password))
+        {
+          String phonenumber = GetNewPhoneNo();
+          int len = phonenumber.length();
+          if (len>10)
+          {
+            Set_EEPROM_phoneumber(phonenumber);
+            if (len>10) {
+              for (int i=0; i<len; i++) {
+                phone_book[DEFAULT_NUMBER][i] = phonenumber[i];
+              }
+              phone_book[DEFAULT_NUMBER][len] = 0;
+            } 
+            Serial.print(F("New phone no:"));
+            Serial.println(phone_book[DEFAULT_NUMBER]);
+          }
+        }
+        else
+        {
+          LCD_PIN_reject();
+        }
+        break;
+      case '*':
         if (CheckPassword(password))
         {
           String passnew = GetNewPassword();
@@ -569,7 +596,7 @@
   
   boolean CheckPhonebook(String number1)
   {
-    for (int i=0; i<3; i++)
+    for (int i=0; i<PHONE_ENTRIES; i++)
     {
       String number2(phone_book[i]);
       int len = number2.length() - 10;
@@ -845,7 +872,6 @@
       digitalWrite(SolenoidValve, HIGH);
       Serial.println("SOLENOID OPEN.");
     }
-
   }
 
   void WaterContainer()
@@ -882,22 +908,72 @@
 
   void FeedButton()
   {
+    int oldstate = feedState;
     feedState = digitalRead(feedPin);
-  if (feedState == HIGH) {           
-      servo.write(stopservo); }
-
-  else if (switchState == LOW) {           
-      servo.write(stop_position + velocity); }
+    if (oldstate != feedState) {
+      if (feedState == HIGH) {           
+        servo.write(stopservo); 
+      } else {           
+        servo.write(stop_position + velocity); 
+      }
+    }
   }
 
   void CleanButton()
   {
+    int oldstate = cleanState;
     cleanState = digitalRead(cleanPin);
-  if ( cleanState == HIGH) {           
-      digitalWrite(pumpSignal, HIGH); }
-
-  else if (cleanState == LOW) {           
-      digitalWrite(pumpSignal, LOW); }
+    if (cleanState == LOW) {
+      PumpOn();
+    } else {
+      if (oldstate != cleanState) {
+        PumpOff();          
+      }
+    }
   }
   #endif
   
+  void Get_EEPROM_phonenumber() 
+  {
+    int len = 0;
+    int addr = PHONE_BOOK_ADDR;
+    phone_number_t temp_phone;
+    for (int i=0; i<sizeof(phone_number_t); i++) {
+      char number = EEPROM.read(addr++);
+      if ((number>='0')&&(number<='9')) {
+        temp_phone[len++] = number;
+      } else break;
+    }
+    temp_phone[len] = 0;
+    Serial.print(F("Default phone no:"));
+    Serial.println(temp_phone);
+    if (len>10) {
+      for (int i=0; i<len; i++) {
+        phone_book[DEFAULT_NUMBER][i] = temp_phone[i];
+      }
+      phone_book[DEFAULT_NUMBER][len] = 0;
+    } 
+  }
+
+  void Set_EEPROM_phoneumber(String phoneno)
+  {
+    int len = phoneno.length();
+    if (len>sizeof(phone_number_t)) len = sizeof(phone_number_t);
+    int addr = PHONE_BOOK_ADDR; 
+    for (int i = 0; i<len; i++)
+    {
+      char Key = phoneno[i];
+      if ((Key>='0')&&(Key<='9'))
+      {
+        EEPROM.update(addr++,Key);
+      }
+      else 
+      {
+        EEPROM.update(addr++,0xFF);
+        break;
+      }
+    }
+    EEPROM.update(addr,0xFF);
+  }
+  
+    
