@@ -3,7 +3,7 @@
   #define USE_GSM     1
   #define USE_KEYPAD  1
   #define USE_FEEDER  1
-  #define USE_RGB_LCD 1
+  #define USE_RGB_LCD 0
   #define USE_YIELD   1
   
   // include the library code:
@@ -14,7 +14,7 @@
   boolean started=false;
   #define PHONE_ENTRIES 2
   #define DEFAULT_NUMBER  USE_RGB_LCD // 0 or 1
-  #define SMS_TARGET0 "09473369156\0"
+  #define SMS_TARGET0 "09473369155\0"
   #define SMS_TARGET1 "09297895641\0" //<-use your own number 
 
   typedef char phone_number_t[14];
