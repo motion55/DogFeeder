@@ -94,7 +94,7 @@
   #include "src/rgb_lcd.h"
 #else
   //#include <LiquidCrystal_I2C.h>
-  #include <LiquidCrystal_PCF8574.h>
+  #include "src/LiquidCrystal_PCF8574.h"
 #endif
 
   // initialize the library with the numbers of the interface pins
